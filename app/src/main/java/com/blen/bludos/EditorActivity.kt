@@ -22,7 +22,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
-class EditorActivity : Activity() {
+import androidx.appcompat.app.AppCompatActivity
+
+class EditorActivity : AppCompatActivity() {
 
     private lateinit var projectDir: File
     private var projectData: JSONObject? = null
