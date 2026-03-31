@@ -9,7 +9,7 @@
         android:id="@+id/tvObjectName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/blen_text_normal"
         android:textSize="14sp" />
 
 </LinearLayout>

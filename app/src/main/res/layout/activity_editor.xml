@@ -3,14 +3,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#1E1E1E">
+    android:background="@color/blen_viewport_bg">
 
     <!-- Top Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:background="#2E2E2E"
+        android:background="@color/blen_panel_bg"
         android:padding="8dp"
         android:gravity="center_vertical">
 
@@ -22,38 +22,58 @@
             android:text="Project Title"
             android:textSize="18sp"
             android:textStyle="bold"
-            android:textColor="#FFFFFF" />
+            android:textColor="@color/blen_text_normal" />
 
-        <Button
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnUndo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Undo"
             android:textSize="12sp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:padding="8dp"
+            android:textColor="@color/blen_text_normal"
+            android:background="@drawable/btn_dark_rounded"
             android:layout_marginEnd="4dp" />
 
-        <Button
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnRedo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Redo"
             android:textSize="12sp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:padding="8dp"
+            android:textColor="@color/blen_text_normal"
+            android:background="@drawable/btn_dark_rounded"
             android:layout_marginEnd="4dp" />
 
-        <Button
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnSave"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Save"
             android:textSize="12sp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:padding="8dp"
+            android:textColor="@color/blen_text_normal"
+            android:background="@drawable/btn_dark_rounded"
             android:layout_marginEnd="4dp" />
 
-        <Button
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnSettings"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Settings"
-            android:textSize="12sp" />
+            android:textSize="12sp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:padding="8dp"
+            android:textColor="@color/blen_text_normal"
+            android:background="@drawable/btn_dark_rounded" />
 
     </LinearLayout>
 
@@ -71,7 +91,7 @@
             android:layout_height="match_parent"
             android:layout_weight="0.2"
             android:orientation="vertical"
-            android:background="#252525"
+            android:background="@color/blen_panel_bg"
             android:padding="8dp">
 
             <TextView
@@ -79,7 +99,7 @@
                 android:layout_height="wrap_content"
                 android:text="Hierarchy"
                 android:textStyle="bold"
-                android:textColor="#DDDDDD"
+                android:textColor="@color/blen_text_normal"
                 android:layout_marginBottom="8dp" />
 
             <androidx.recyclerview.widget.RecyclerView
@@ -89,26 +109,17 @@
 
         </LinearLayout>
 
-        <!-- Center Panel: 3D Viewport Stub -->
+        <!-- Center Panel: 3D Viewport Engine -->
         <FrameLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="0.6"
-            android:background="#121212">
+            android:background="@color/blen_viewport_bg">
 
-            <!-- Infinite grid placeholder -->
-            <View
+            <com.blen.bludos.BlenGLSurfaceView
+                android:id="@+id/glSurfaceView"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="@drawable/grid_placeholder" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="3D Viewport"
-                android:textColor="#555555"
-                android:textSize="24sp" />
+                android:layout_height="match_parent" />
 
         </FrameLayout>
 
@@ -117,7 +128,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="0.2"
-            android:background="#252525">
+            android:background="@color/blen_panel_bg">
 
             <LinearLayout
                 android:id="@+id/panelProperties"
@@ -131,7 +142,7 @@
                     android:layout_height="wrap_content"
                     android:text="Properties"
                     android:textStyle="bold"
-                    android:textColor="#DDDDDD"
+                    android:textColor="@color/blen_text_normal"
                     android:layout_marginBottom="16dp" />
 
                 <!-- Transform -->
@@ -139,7 +150,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Position"
-                    android:textColor="#AAAAAA"
+                    android:textColor="@color/blen_text_normal"
                     android:textSize="12sp" />
 
                 <LinearLayout
@@ -157,7 +168,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Rotation"
-                    android:textColor="#AAAAAA"
+                    android:textColor="@color/blen_text_normal"
                     android:textSize="12sp" />
 
                 <LinearLayout
@@ -175,7 +186,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Scale"
-                    android:textColor="#AAAAAA"
+                    android:textColor="@color/blen_text_normal"
                     android:textSize="12sp" />
 
                 <LinearLayout

@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="?android:attr/windowBackground"
+    android:background="@color/blen_viewport_bg"
     tools:context=".MainActivity">
 
     <LinearLayout
@@ -13,7 +13,7 @@
         android:orientation="horizontal"
         android:padding="16dp"
         android:gravity="center_vertical"
-        android:background="#2E2E2E">
+        android:background="@color/blen_panel_bg">
 
         <TextView
             android:layout_width="0dp"
@@ -22,19 +22,23 @@
             android:text="Projects"
             android:textSize="24sp"
             android:textStyle="bold"
-            android:textColor="?android:attr/textColorPrimary" />
+            android:textColor="@color/blen_text_normal" />
 
-        <Button
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnImportProject"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Import"
+            android:textColor="@color/blen_text_normal"
+            android:background="@drawable/btn_dark_rounded"
             android:layout_marginEnd="8dp"/>
 
-        <Button
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btnNewProject"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:textColor="@color/blen_text_normal"
+            android:background="@drawable/btn_dark_rounded"
             android:text="New Project" />
 
     </LinearLayout>

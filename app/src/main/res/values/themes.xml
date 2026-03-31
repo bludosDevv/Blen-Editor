@@ -7,9 +7,12 @@
         <item name="colorAccent">@color/teal_200</item>
         <!-- Customize your theme here. -->
         <item name="android:fontFamily">@font/google_sans</item>
+        <item name="fontFamily">@font/google_sans</item>
         <item name="android:windowBackground">#1E1E1E</item>
         <item name="android:textColor">#FFFFFF</item>
         <item name="android:textColorPrimary">#FFFFFF</item>
         <item name="android:textColorSecondary">#AAAAAA</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="windowNoTitle">true</item>
     </style>
 </resources>

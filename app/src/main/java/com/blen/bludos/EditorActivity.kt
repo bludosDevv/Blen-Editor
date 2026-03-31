@@ -21,8 +21,12 @@ import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import android.view.KeyEvent
 
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 class EditorActivity : AppCompatActivity() {
 
@@ -37,6 +41,13 @@ class EditorActivity : AppCompatActivity() {
 
     private lateinit var rvHierarchy: RecyclerView
     private lateinit var hierarchyAdapter: HierarchyAdapter
+
+    private lateinit var glSurfaceView: BlenGLSurfaceView
+    private lateinit var renderer: BlenRenderer
+
+    // Transform State (G, R, S)
+    private var activeTransformMode: Char? = null // 'g', 'r', 's', null
+    private var activeAxisLock: Char? = null // 'x', 'y', 'z', null
 
     // Properties inputs
     private lateinit var etPosX: EditText
@@ -55,6 +66,12 @@ class EditorActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
          super.onCreate(savedInstanceState)
+
+         WindowCompat.setDecorFitsSystemWindows(window, false)
+         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+         insetsController?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+         insetsController?.hide(WindowInsetsCompat.Type.systemBars())
+
          setContentView(R.layout.activity_editor)
 
          val path = intent.getStringExtra("PROJECT_PATH")
@@ -67,6 +84,143 @@ class EditorActivity : AppCompatActivity() {
          initUI()
          loadProject()
          applyUIScale()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::glSurfaceView.isInitialized) {
+            glSurfaceView.onResume()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (::glSurfaceView.isInitialized) {
+            glSurfaceView.onPause()
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // Only process keybinds if we are not actively typing in an EditText
+        if (currentFocus is EditText) {
+            return super.onKeyDown(keyCode, event)
+        }
+
+        when (keyCode) {
+            KeyEvent.KEYCODE_G -> {
+                activeTransformMode = 'g'
+                activeAxisLock = null
+                return true
+            }
+            KeyEvent.KEYCODE_R -> {
+                activeTransformMode = 'r'
+                activeAxisLock = null
+                return true
+            }
+            KeyEvent.KEYCODE_S -> {
+                activeTransformMode = 's'
+                activeAxisLock = null
+                return true
+            }
+            KeyEvent.KEYCODE_X -> {
+                if (activeTransformMode != null) {
+                    activeAxisLock = 'x'
+                    return true
+                }
+            }
+            KeyEvent.KEYCODE_Y -> {
+                if (activeTransformMode != null) {
+                    activeAxisLock = 'y'
+                    return true
+                }
+            }
+            KeyEvent.KEYCODE_Z -> {
+                if (activeTransformMode != null) {
+                    activeAxisLock = 'z'
+                    return true
+                }
+            }
+            KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_ENTER -> {
+                // Commit or cancel transform
+                activeTransformMode = null
+                activeAxisLock = null
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    // Mouse state for screen-space transforms
+    private var prevMouseX = -1f
+    private var prevMouseY = -1f
+
+    // Pass motion events to GL view for transform manipulation if a mode is active
+    override fun dispatchGenericMotionEvent(ev: android.view.MotionEvent): Boolean {
+        if (activeTransformMode != null && ev.actionMasked == android.view.MotionEvent.ACTION_HOVER_MOVE) {
+            val currentX = ev.x
+            val currentY = ev.y
+
+            if (prevMouseX != -1f && prevMouseY != -1f) {
+                val dx = currentX - prevMouseX
+                val dy = currentY - prevMouseY
+
+                // Screen space simple drag factor
+                val factor = 0.05f
+                val amount = (dx - dy) * factor // Move right/up increases, left/down decreases
+
+                if (::renderer.isInitialized) {
+                    val cr = renderer.cubeRenderer
+                    when (activeTransformMode) {
+                        'g' -> {
+                            when (activeAxisLock) {
+                                'x' -> cr.px += amount
+                                'y' -> cr.py += amount
+                                'z' -> cr.pz += amount
+                                else -> { cr.px += dx * factor; cr.pz += dy * factor } // Free transform on XZ plane
+                            }
+                            etPosX.setText(cr.px.toString())
+                            etPosY.setText(cr.py.toString())
+                            etPosZ.setText(cr.pz.toString())
+                        }
+                        'r' -> {
+                            val rAmount = amount * 10f // Degrees
+                            when (activeAxisLock) {
+                                'x' -> cr.rx += rAmount
+                                'y' -> cr.ry += rAmount
+                                'z' -> cr.rz += rAmount
+                                else -> { cr.ry += dx * factor * 10f; cr.rx += dy * factor * 10f }
+                            }
+                            etRotX.setText(cr.rx.toString())
+                            etRotY.setText(cr.ry.toString())
+                            etRotZ.setText(cr.rz.toString())
+                        }
+                        's' -> {
+                            val sAmount = amount * 0.1f
+                            when (activeAxisLock) {
+                                'x' -> cr.sx += sAmount
+                                'y' -> cr.sy += sAmount
+                                'z' -> cr.sz += sAmount
+                                else -> { cr.sx += sAmount; cr.sy += sAmount; cr.sz += sAmount }
+                            }
+                            etScaleX.setText(cr.sx.toString())
+                            etScaleY.setText(cr.sy.toString())
+                            etScaleZ.setText(cr.sz.toString())
+                        }
+                    }
+                }
+            }
+            prevMouseX = currentX
+            prevMouseY = currentY
+            return true // Consume event
+        }
+
+        // Reset if we aren't moving in a mode
+        if (activeTransformMode == null) {
+            prevMouseX = -1f
+            prevMouseY = -1f
+        }
+
+        return super.dispatchGenericMotionEvent(ev)
     }
 
     private fun applyUIScale() {
@@ -102,6 +256,11 @@ class EditorActivity : AppCompatActivity() {
             selectObject(obj)
         }
         rvHierarchy.adapter = hierarchyAdapter
+
+        glSurfaceView = findViewById(R.id.glSurfaceView)
+        renderer = BlenRenderer()
+        glSurfaceView.setRenderer(renderer)
+        glSurfaceView.renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
 
         etPosX = findViewById(R.id.etPosX)
         etPosY = findViewById(R.id.etPosY)
@@ -336,6 +495,22 @@ class EditorActivity : AppCompatActivity() {
             etScaleY.setText(transform.optDouble("sy", 1.0).toString())
             etScaleZ.setText(transform.optDouble("sz", 1.0).toString())
             isUpdatingUI = false
+
+            if (::renderer.isInitialized && this::renderer.isInitialized) {
+                // If the object name is "Cube" or we just map current properties to the single cube renderer for now
+                renderer.cubeRenderer.isSelected = true
+                renderer.cubeRenderer.px = transform.optDouble("px", 0.0).toFloat()
+                renderer.cubeRenderer.py = transform.optDouble("py", 0.0).toFloat()
+                renderer.cubeRenderer.pz = transform.optDouble("pz", 0.0).toFloat()
+
+                renderer.cubeRenderer.rx = transform.optDouble("rx", 0.0).toFloat()
+                renderer.cubeRenderer.ry = transform.optDouble("ry", 0.0).toFloat()
+                renderer.cubeRenderer.rz = transform.optDouble("rz", 0.0).toFloat()
+
+                renderer.cubeRenderer.sx = transform.optDouble("sx", 1.0).toFloat()
+                renderer.cubeRenderer.sy = transform.optDouble("sy", 1.0).toFloat()
+                renderer.cubeRenderer.sz = transform.optDouble("sz", 1.0).toFloat()
+            }
         }
     }
 }
