@@ -1,0 +1,339 @@
+package com.blen.bludos
+
+import android.app.Activity
+import android.os.Bundle
+import android.widget.EditText
+import android.widget.TextView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import android.app.AlertDialog
+import android.content.Context
+import android.view.LayoutInflater
+import android.widget.Button
+import android.widget.SeekBar
+import android.widget.Switch
+import android.util.TypedValue
+import android.view.View
+import android.view.ViewGroup
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
+
+class EditorActivity : Activity() {
+
+    private lateinit var projectDir: File
+    private var projectData: JSONObject? = null
+    private val sceneObjects = mutableListOf<JSONObject>()
+
+    private var autoSaveEnabled = false
+    private var scheduledExecutor: ScheduledExecutorService? = null
+
+    private val historyManager = HistoryManager()
+
+    private lateinit var rvHierarchy: RecyclerView
+    private lateinit var hierarchyAdapter: HierarchyAdapter
+
+    // Properties inputs
+    private lateinit var etPosX: EditText
+    private lateinit var etPosY: EditText
+    private lateinit var etPosZ: EditText
+    private lateinit var etRotX: EditText
+    private lateinit var etRotY: EditText
+    private lateinit var etRotZ: EditText
+    private lateinit var etScaleX: EditText
+    private lateinit var etScaleY: EditText
+    private lateinit var etScaleZ: EditText
+
+    private var currentSelectedObject: JSONObject? = null
+
+    private var isUpdatingUI = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         setContentView(R.layout.activity_editor)
+
+         val path = intent.getStringExtra("PROJECT_PATH")
+         if (path == null) {
+             finish()
+             return
+         }
+         projectDir = File(path)
+
+         initUI()
+         loadProject()
+         applyUIScale()
+    }
+
+    private fun applyUIScale() {
+        val prefs = getSharedPreferences("BlenPrefs", Context.MODE_PRIVATE)
+        val scalePercent = prefs.getInt("ui_scale", 100)
+        val scaleFactor = scalePercent / 100f
+
+        val rootView = findViewById<ViewGroup>(android.R.id.content)
+        scaleViewTree(rootView, scaleFactor)
+    }
+
+    private fun scaleViewTree(view: View, scaleFactor: Float) {
+        if (view is TextView) {
+            // Assume 14sp as base size for typical text if not explicitly set
+            // In a more robust system, you'd track original dimensions in a custom attribute.
+            // For this implementation, we just apply a multiplier to current or base.
+            val currentSize = view.textSize
+            view.setTextSize(TypedValue.COMPLEX_UNIT_PX, currentSize * scaleFactor)
+        }
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                scaleViewTree(view.getChildAt(i), scaleFactor)
+            }
+        }
+    }
+
+    private fun initUI() {
+        findViewById<TextView>(R.id.tvProjectTitle).text = projectDir.name
+
+        rvHierarchy = findViewById(R.id.rvHierarchy)
+        rvHierarchy.layoutManager = LinearLayoutManager(this)
+        hierarchyAdapter = HierarchyAdapter(sceneObjects) { obj ->
+            selectObject(obj)
+        }
+        rvHierarchy.adapter = hierarchyAdapter
+
+        etPosX = findViewById(R.id.etPosX)
+        etPosY = findViewById(R.id.etPosY)
+        etPosZ = findViewById(R.id.etPosZ)
+        etRotX = findViewById(R.id.etRotX)
+        etRotY = findViewById(R.id.etRotY)
+        etRotZ = findViewById(R.id.etRotZ)
+        etScaleX = findViewById(R.id.etScaleX)
+        etScaleY = findViewById(R.id.etScaleY)
+        etScaleZ = findViewById(R.id.etScaleZ)
+
+        val recordWatcher = object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (!isUpdatingUI) {
+                    recordState()
+                }
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        }
+
+        etPosX.addTextChangedListener(recordWatcher)
+        etPosY.addTextChangedListener(recordWatcher)
+        etPosZ.addTextChangedListener(recordWatcher)
+        etRotX.addTextChangedListener(recordWatcher)
+        etRotY.addTextChangedListener(recordWatcher)
+        etRotZ.addTextChangedListener(recordWatcher)
+        etScaleX.addTextChangedListener(recordWatcher)
+        etScaleY.addTextChangedListener(recordWatcher)
+        etScaleZ.addTextChangedListener(recordWatcher)
+
+        findViewById<Button>(R.id.btnSettings).setOnClickListener {
+            showSettingsDialog()
+        }
+
+        findViewById<Button>(R.id.btnSave).setOnClickListener {
+            saveProject()
+        }
+
+        findViewById<Button>(R.id.btnUndo).setOnClickListener {
+            val prevState = historyManager.undo()
+            if (prevState != null) {
+                applyState(prevState)
+            }
+        }
+
+        findViewById<Button>(R.id.btnRedo).setOnClickListener {
+            val nextState = historyManager.redo()
+            if (nextState != null) {
+                applyState(nextState)
+            }
+        }
+    }
+
+    private fun recordState() {
+        if (projectData != null) {
+            val objsArray = JSONArray()
+            sceneObjects.forEach { obj ->
+                if (currentSelectedObject == obj) {
+                    val transform = obj.optJSONObject("transform") ?: JSONObject()
+                    transform.put("px", etPosX.text.toString().toDoubleOrNull() ?: 0.0)
+                    transform.put("py", etPosY.text.toString().toDoubleOrNull() ?: 0.0)
+                    transform.put("pz", etPosZ.text.toString().toDoubleOrNull() ?: 0.0)
+
+                    transform.put("rx", etRotX.text.toString().toDoubleOrNull() ?: 0.0)
+                    transform.put("ry", etRotY.text.toString().toDoubleOrNull() ?: 0.0)
+                    transform.put("rz", etRotZ.text.toString().toDoubleOrNull() ?: 0.0)
+
+                    transform.put("sx", etScaleX.text.toString().toDoubleOrNull() ?: 1.0)
+                    transform.put("sy", etScaleY.text.toString().toDoubleOrNull() ?: 1.0)
+                    transform.put("sz", etScaleZ.text.toString().toDoubleOrNull() ?: 1.0)
+
+                    obj.put("transform", transform)
+                }
+                objsArray.put(obj)
+            }
+            projectData!!.put("objects", objsArray)
+            historyManager.pushState(projectData.toString())
+        }
+    }
+
+    private fun applyState(stateJson: String) {
+        val json = JSONObject(stateJson)
+        projectData = json
+        val objsArray = json.optJSONArray("objects")
+        if (objsArray != null) {
+            sceneObjects.clear()
+            for (i in 0 until objsArray.length()) {
+                val obj = objsArray.optJSONObject(i)
+                if (obj != null) {
+                    sceneObjects.add(obj)
+                }
+            }
+            hierarchyAdapter.notifyDataSetChanged()
+
+            if (currentSelectedObject != null) {
+                val currentId = currentSelectedObject!!.optString("id")
+                val restoredObj = sceneObjects.find { it.optString("id") == currentId }
+                if (restoredObj != null) {
+                    selectObject(restoredObj)
+                } else if (sceneObjects.isNotEmpty()) {
+                    selectObject(sceneObjects[0])
+                }
+            } else if (sceneObjects.isNotEmpty()) {
+                selectObject(sceneObjects[0])
+            }
+        }
+    }
+
+    private fun showSettingsDialog() {
+        val prefs = getSharedPreferences("BlenPrefs", Context.MODE_PRIVATE)
+
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_settings, null)
+        val seekUIScale = dialogView.findViewById<SeekBar>(R.id.seekUIScale)
+        val switchAutoSave = dialogView.findViewById<Switch>(R.id.switchAutoSave)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnSettingsClose)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        seekUIScale.progress = prefs.getInt("ui_scale", 100)
+        switchAutoSave.isChecked = prefs.getBoolean("auto_save", false)
+
+        seekUIScale.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    val rootView = this@EditorActivity.findViewById<ViewGroup>(android.R.id.content)
+                    // Resetting to base size dynamically is complex without storing it,
+                    // so we save and recreate the activity for a clean UI scale update.
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                prefs.edit().putInt("ui_scale", seekBar?.progress ?: 100).apply()
+                recreate() // Simple and robust way to re-apply the global scale factor
+            }
+        })
+
+        switchAutoSave.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("auto_save", isChecked).apply()
+            autoSaveEnabled = isChecked
+            setupAutoSave()
+        }
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    private fun setupAutoSave() {
+        scheduledExecutor?.shutdownNow()
+
+        if (autoSaveEnabled) {
+            scheduledExecutor = Executors.newSingleThreadScheduledExecutor()
+            scheduledExecutor?.scheduleAtFixedRate({
+                saveProject()
+            }, 5, 5, TimeUnit.SECONDS)
+        }
+    }
+
+    private fun saveProject() {
+        if (projectData != null) {
+            // Update the JSON structure with current values
+            val objsArray = JSONArray()
+            sceneObjects.forEach { obj ->
+                if (currentSelectedObject == obj) {
+                    val transform = obj.optJSONObject("transform") ?: JSONObject()
+                    transform.put("px", etPosX.text.toString().toDoubleOrNull() ?: 0.0)
+                    transform.put("py", etPosY.text.toString().toDoubleOrNull() ?: 0.0)
+                    transform.put("pz", etPosZ.text.toString().toDoubleOrNull() ?: 0.0)
+
+                    transform.put("rx", etRotX.text.toString().toDoubleOrNull() ?: 0.0)
+                    transform.put("ry", etRotY.text.toString().toDoubleOrNull() ?: 0.0)
+                    transform.put("rz", etRotZ.text.toString().toDoubleOrNull() ?: 0.0)
+
+                    transform.put("sx", etScaleX.text.toString().toDoubleOrNull() ?: 1.0)
+                    transform.put("sy", etScaleY.text.toString().toDoubleOrNull() ?: 1.0)
+                    transform.put("sz", etScaleZ.text.toString().toDoubleOrNull() ?: 1.0)
+
+                    obj.put("transform", transform)
+                }
+                objsArray.put(obj)
+            }
+            projectData!!.put("objects", objsArray)
+
+            // Save in background to avoid lag
+            Executors.newSingleThreadExecutor().execute {
+                ProjectManager.saveProject(projectDir, projectData!!)
+            }
+        }
+    }
+
+    private fun loadProject() {
+        projectData = ProjectManager.loadProject(projectDir)
+        projectData?.let {
+            val objsArray = it.optJSONArray("objects")
+            if (objsArray != null) {
+                sceneObjects.clear()
+                for (i in 0 until objsArray.length()) {
+                    val obj = objsArray.optJSONObject(i)
+                    if (obj != null) {
+                        sceneObjects.add(obj)
+                    }
+                }
+                hierarchyAdapter.notifyDataSetChanged()
+
+                if (sceneObjects.isNotEmpty()) {
+                    selectObject(sceneObjects[0])
+                }
+            }
+            historyManager.pushState(it.toString())
+        }
+    }
+
+    private fun selectObject(obj: JSONObject) {
+        currentSelectedObject = obj
+        val transform = obj.optJSONObject("transform")
+        if (transform != null) {
+            isUpdatingUI = true
+            etPosX.setText(transform.optDouble("px", 0.0).toString())
+            etPosY.setText(transform.optDouble("py", 0.0).toString())
+            etPosZ.setText(transform.optDouble("pz", 0.0).toString())
+
+            etRotX.setText(transform.optDouble("rx", 0.0).toString())
+            etRotY.setText(transform.optDouble("ry", 0.0).toString())
+            etRotZ.setText(transform.optDouble("rz", 0.0).toString())
+
+            etScaleX.setText(transform.optDouble("sx", 1.0).toString())
+            etScaleY.setText(transform.optDouble("sy", 1.0).toString())
+            etScaleZ.setText(transform.optDouble("sz", 1.0).toString())
+            isUpdatingUI = false
+        }
+    }
+}
