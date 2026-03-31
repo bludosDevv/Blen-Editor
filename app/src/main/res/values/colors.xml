@@ -7,4 +7,12 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Blen UI Colors -->
+    <color name="blen_viewport_bg">#1c1c1c</color>
+    <color name="blen_panel_bg">#282828</color>
+    <color name="blen_accent">#ea7600</color>
+    <color name="blen_text_normal">#cccccc</color>
+    <color name="blen_btn_bg">#333333</color>
+    <color name="blen_btn_stroke">#444444</color>
 </resources>

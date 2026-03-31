@@ -7,34 +7,70 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
-import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.documentfile.provider.DocumentFile
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import com.blen.bludos.ui.theme.AppTypography
 import java.io.File
 import java.io.FileOutputStream
 
-public class MainActivity : AppCompatActivity() {
+// Blen Dark Theme Colors for Compose
+val BlenViewportBg = Color(0xFF1C1C1C)
+val BlenPanelBg = Color(0xFF282828)
+val BlenAccent = Color(0xFFEA7600)
+val BlenTextNormal = Color(0xFFCCCCCC)
+val BlenBtnBg = Color(0xFF333333)
+val BlenBtnStroke = Color(0xFF444444)
 
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var projectAdapter: ProjectAdapter
+public class MainActivity : ComponentActivity() {
+
+    private var projectListState = mutableStateListOf<File>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
          super.onCreate(savedInstanceState)
-         setContentView(R.layout.activity_main)
 
-         recyclerView = findViewById(R.id.recyclerViewProjects)
-         recyclerView.layoutManager = LinearLayoutManager(this)
+         WindowCompat.setDecorFitsSystemWindows(window, false)
+         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+         insetsController?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+         insetsController?.hide(WindowInsetsCompat.Type.systemBars())
 
-         findViewById<Button>(R.id.btnNewProject).setOnClickListener {
-             showNewProjectDialog()
-         }
-
-         findViewById<Button>(R.id.btnImportProject).setOnClickListener {
-             importProject()
+         setContent {
+             MaterialTheme(
+                 colorScheme = darkColorScheme(
+                     background = BlenViewportBg,
+                     surface = BlenPanelBg,
+                     primary = BlenAccent,
+                     onBackground = BlenTextNormal,
+                     onSurface = BlenTextNormal
+                 ),
+                 typography = AppTypography
+             ) {
+                 MainScreen(
+                     projects = projectListState,
+                     onNewProject = { showNewProjectDialog() },
+                     onImportProject = { importProject() },
+                     onOpenProject = { openProject(it) }
+                 )
+             }
          }
 
          checkPermissions()
@@ -86,10 +122,8 @@ public class MainActivity : AppCompatActivity() {
 
     private fun updateProjectList() {
         val projects = ProjectManager.getProjects()
-        projectAdapter = ProjectAdapter(projects) { projectFile ->
-            openProject(projectFile)
-        }
-        recyclerView.adapter = projectAdapter
+        projectListState.clear()
+        projectListState.addAll(projects)
     }
 
     private fun showNewProjectDialog() {
@@ -157,5 +191,91 @@ public class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun MainScreen(
+    projects: List<File>,
+    onNewProject: () -> Unit,
+    onImportProject: () -> Unit,
+    onOpenProject: (File) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Top Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Projects",
+                color = MaterialTheme.colorScheme.onBackground,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+
+            BlenButton(text = "Import", onClick = onImportProject, modifier = Modifier.padding(end = 8.dp))
+            BlenButton(text = "New Project", onClick = onNewProject)
+        }
+
+        // Project List
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            items(projects) { project ->
+                ProjectItem(project = project, onClick = { onOpenProject(project) })
+            }
+        }
+    }
+}
+
+@Composable
+fun ProjectItem(project: File, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .background(Color(0xFF3E3E3E), RoundedCornerShape(4.dp))
+            .clickable { onClick() }
+            .padding(16.dp)
+    ) {
+        Text(
+            text = project.name,
+            color = MaterialTheme.colorScheme.onBackground,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = project.absolutePath,
+            color = Color.Gray,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+fun BlenButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = BlenBtnBg,
+            contentColor = BlenTextNormal
+        ),
+        shape = RoundedCornerShape(4.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        modifier = modifier
+    ) {
+        Text(text = text, fontSize = 14.sp)
     }
 }
