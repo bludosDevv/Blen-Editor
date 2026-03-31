@@ -20,6 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,6 +29,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.blen.bludos.ui.theme.AppTypography
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -69,6 +72,21 @@ class EditorActivity : ComponentActivity() {
 
     private var isUpdatingUI = false
 
+    // Panel Expansion State
+    private var isTransformExpanded by mutableStateOf(true)
+    private var isMaterialExpanded by mutableStateOf(true)
+
+    // Material State
+    private var matColorR by mutableStateOf(0.8f)
+    private var matColorG by mutableStateOf(0.8f)
+    private var matColorB by mutableStateOf(0.8f)
+    private var matMetallic by mutableStateOf(0.0f)
+    private var matRoughness by mutableStateOf(0.5f)
+    private var matEmissionR by mutableStateOf(0.0f)
+    private var matEmissionG by mutableStateOf(0.0f)
+    private var matEmissionB by mutableStateOf(0.0f)
+    private var matEmissionIntensity by mutableStateOf(0.0f)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -94,7 +112,8 @@ class EditorActivity : ComponentActivity() {
                      primary = BlenAccent,
                      onBackground = BlenTextNormal,
                      onSurface = BlenTextNormal
-                 )
+                 ),
+                 typography = AppTypography
              ) {
                  EditorScreen()
              }
@@ -185,8 +204,6 @@ class EditorActivity : ComponentActivity() {
                         update = { view ->
                             // When the view updates (which means compose state changed like px, py)
                             // Let's ensure the renderer is synced if it is initialized.
-                            // The cubeRenderer might not be immediately initialized by GL thread,
-                            // so we queue a runnable to check and sync.
                             view.queueEvent {
                                 if (::renderer.isInitialized) {
                                     try {
@@ -203,6 +220,10 @@ class EditorActivity : ComponentActivity() {
                                         if (currentSelectedObject != null) {
                                             cr.isSelected = true
                                         }
+
+                                        // Update gizmo renderer mode
+                                        val gizmoMode = activeTransformMode ?: 'g'
+                                        renderer.gizmoRenderer.activeMode = gizmoMode
                                     } catch (e: Exception) {
                                         // Ignore
                                     }
@@ -211,6 +232,21 @@ class EditorActivity : ComponentActivity() {
                         },
                         modifier = Modifier.fillMaxSize()
                     )
+
+                    // Gizmo State Toolbar (Overlay)
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = 16.dp)
+                            .background(Color(0x88000000), RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        GizmoButton("P", activeTransformMode == 'g' || activeTransformMode == null) { activeTransformMode = 'g' }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        GizmoButton("R", activeTransformMode == 'r') { activeTransformMode = 'r' }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        GizmoButton("S", activeTransformMode == 's') { activeTransformMode = 's' }
+                    }
                 }
 
                 // Right Panel: Properties
@@ -219,15 +255,99 @@ class EditorActivity : ComponentActivity() {
                         .fillMaxHeight()
                         .weight(0.2f)
                         .background(MaterialTheme.colorScheme.surface)
-                        .padding(8.dp)
                 ) {
-                    Text("Properties", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(bottom = 16.dp))
+                    Text("Properties", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(12.dp))
 
-                    PropertySection("Position", px, py, pz, { px = it; updateTransform() }, { py = it; updateTransform() }, { pz = it; updateTransform() })
-                    PropertySection("Rotation", rx, ry, rz, { rx = it; updateTransform() }, { ry = it; updateTransform() }, { rz = it; updateTransform() })
-                    PropertySection("Scale", sx, sy, sz, { sx = it; updateTransform() }, { sy = it; updateTransform() }, { sz = it; updateTransform() })
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            CollapsibleSection("Transform", isTransformExpanded, { isTransformExpanded = !isTransformExpanded }) {
+                                PropertySection("Position", px, py, pz, { px = it; updateTransform() }, { py = it; updateTransform() }, { pz = it; updateTransform() })
+                                PropertySection("Rotation", rx, ry, rz, { rx = it; updateTransform() }, { ry = it; updateTransform() }, { rz = it; updateTransform() })
+                                PropertySection("Scale", sx, sy, sz, { sx = it; updateTransform() }, { sy = it; updateTransform() }, { sz = it; updateTransform() })
+                            }
+                        }
+                        item {
+                            CollapsibleSection("Material", isMaterialExpanded, { isMaterialExpanded = !isMaterialExpanded }) {
+                                MaterialColorSlider("Albedo R", matColorR) { matColorR = it; updateMaterial() }
+                                MaterialColorSlider("Albedo G", matColorG) { matColorG = it; updateMaterial() }
+                                MaterialColorSlider("Albedo B", matColorB) { matColorB = it; updateMaterial() }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                MaterialSlider("Metallic", matMetallic) { matMetallic = it; updateMaterial() }
+                                MaterialSlider("Roughness", matRoughness) { matRoughness = it; updateMaterial() }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                MaterialColorSlider("Emission R", matEmissionR) { matEmissionR = it; updateMaterial() }
+                                MaterialColorSlider("Emission G", matEmissionG) { matEmissionG = it; updateMaterial() }
+                                MaterialColorSlider("Emission B", matEmissionB) { matEmissionB = it; updateMaterial() }
+                                MaterialSlider("Emission Intensity", matEmissionIntensity, 0f, 10f) { matEmissionIntensity = it; updateMaterial() }
+                            }
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    @Composable
+    fun MaterialSlider(title: String, value: Float, rangeMin: Float = 0f, rangeMax: Float = 1f, onValueChange: (Float) -> Unit) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(title, color = Color.Gray, fontSize = 12.sp)
+                Text(String.format("%.2f", value), color = Color.White, fontSize = 12.sp)
+            }
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = rangeMin..rangeMax,
+                colors = SliderDefaults.colors(thumbColor = BlenAccent, activeTrackColor = BlenAccent, inactiveTrackColor = BlenBtnStroke)
+            )
+        }
+    }
+
+    @Composable
+    fun MaterialColorSlider(title: String, value: Float, onValueChange: (Float) -> Unit) {
+        MaterialSlider(title, value, 0f, 1f, onValueChange)
+    }
+
+    @Composable
+    fun CollapsibleSection(title: String, isExpanded: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() }
+                    .background(Color(0xFF383838))
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(if (isExpanded) "▼" else "▶", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(end = 8.dp))
+                Text(title, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    content()
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun GizmoButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
+        val bgColor = if (isSelected) BlenAccent else Color.Transparent
+        val textColor = if (isSelected) Color.White else BlenTextNormal
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(bgColor, RoundedCornerShape(4.dp))
+                .clickable { onClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = text, color = textColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
     }
 
@@ -265,6 +385,24 @@ class EditorActivity : ComponentActivity() {
                     singleLine = true,
                     colors = TextFieldDefaults.outlinedTextFieldColors(unfocusedBorderColor = BlenBtnStroke, focusedBorderColor = BlenAccent)
                 )
+            }
+        }
+    }
+
+    private fun updateMaterial() {
+        if (!isUpdatingUI) {
+            recordState()
+
+            if (::glSurfaceView.isInitialized && ::renderer.isInitialized) {
+                glSurfaceView.queueEvent {
+                    try {
+                        renderer.cubeRenderer.albedo = floatArrayOf(matColorR, matColorG, matColorB, 1f)
+                        renderer.cubeRenderer.metallic = matMetallic
+                        renderer.cubeRenderer.roughness = matRoughness
+                        renderer.cubeRenderer.emission = floatArrayOf(matEmissionR, matEmissionG, matEmissionB, 1f)
+                        renderer.cubeRenderer.emissionIntensity = matEmissionIntensity
+                    } catch (e: Exception) {}
+                }
             }
         }
     }
@@ -413,6 +551,19 @@ class EditorActivity : ComponentActivity() {
                     transform.put("sz", sz.toDoubleOrNull() ?: 1.0)
 
                     obj.put("transform", transform)
+
+                    val mat = obj.optJSONObject("material") ?: JSONObject()
+                    mat.put("albedoR", matColorR.toDouble())
+                    mat.put("albedoG", matColorG.toDouble())
+                    mat.put("albedoB", matColorB.toDouble())
+                    mat.put("metallic", matMetallic.toDouble())
+                    mat.put("roughness", matRoughness.toDouble())
+                    mat.put("emissionR", matEmissionR.toDouble())
+                    mat.put("emissionG", matEmissionG.toDouble())
+                    mat.put("emissionB", matEmissionB.toDouble())
+                    mat.put("emissionIntensity", matEmissionIntensity.toDouble())
+
+                    obj.put("material", mat)
                 }
                 objsArray.put(obj)
             }
@@ -477,6 +628,19 @@ class EditorActivity : ComponentActivity() {
                     transform.put("sz", sz.toDoubleOrNull() ?: 1.0)
 
                     obj.put("transform", transform)
+
+                    val mat = obj.optJSONObject("material") ?: JSONObject()
+                    mat.put("albedoR", matColorR.toDouble())
+                    mat.put("albedoG", matColorG.toDouble())
+                    mat.put("albedoB", matColorB.toDouble())
+                    mat.put("metallic", matMetallic.toDouble())
+                    mat.put("roughness", matRoughness.toDouble())
+                    mat.put("emissionR", matEmissionR.toDouble())
+                    mat.put("emissionG", matEmissionG.toDouble())
+                    mat.put("emissionB", matEmissionB.toDouble())
+                    mat.put("emissionIntensity", matEmissionIntensity.toDouble())
+
+                    obj.put("material", mat)
                 }
                 objsArray.put(obj)
             }
@@ -501,8 +665,16 @@ class EditorActivity : ComponentActivity() {
                     }
                 }
 
-                if (sceneObjects.isNotEmpty()) {
-                    selectObject(sceneObjects[0])
+                // Set the default state to no selection. Cube is drawn matte grey until selected.
+                currentSelectedObject = null
+                if (::glSurfaceView.isInitialized && ::renderer.isInitialized) {
+                    glSurfaceView.queueEvent {
+                        try {
+                            renderer.cubeRenderer.isSelected = false
+                        } catch (e: Exception) {
+                            // Ignore
+                        }
+                    }
                 }
             }
             historyManager.pushState(it.toString())
@@ -525,6 +697,20 @@ class EditorActivity : ComponentActivity() {
             sx = transform.optDouble("sx", 1.0).toString()
             sy = transform.optDouble("sy", 1.0).toString()
             sz = transform.optDouble("sz", 1.0).toString()
+
+            val mat = obj.optJSONObject("material")
+            if (mat != null) {
+                matColorR = mat.optDouble("albedoR", 0.8).toFloat()
+                matColorG = mat.optDouble("albedoG", 0.8).toFloat()
+                matColorB = mat.optDouble("albedoB", 0.8).toFloat()
+                matMetallic = mat.optDouble("metallic", 0.0).toFloat()
+                matRoughness = mat.optDouble("roughness", 0.5).toFloat()
+                matEmissionR = mat.optDouble("emissionR", 0.0).toFloat()
+                matEmissionG = mat.optDouble("emissionG", 0.0).toFloat()
+                matEmissionB = mat.optDouble("emissionB", 0.0).toFloat()
+                matEmissionIntensity = mat.optDouble("emissionIntensity", 0.0).toFloat()
+            }
+
             isUpdatingUI = false
 
             if (::glSurfaceView.isInitialized && ::renderer.isInitialized) {
@@ -543,6 +729,25 @@ class EditorActivity : ComponentActivity() {
                         renderer.cubeRenderer.sx = transform.optDouble("sx", 1.0).toFloat()
                         renderer.cubeRenderer.sy = transform.optDouble("sy", 1.0).toFloat()
                         renderer.cubeRenderer.sz = transform.optDouble("sz", 1.0).toFloat()
+
+                        val mat = obj.optJSONObject("material")
+                        if (mat != null) {
+                            renderer.cubeRenderer.albedo = floatArrayOf(
+                                mat.optDouble("albedoR", 0.8).toFloat(),
+                                mat.optDouble("albedoG", 0.8).toFloat(),
+                                mat.optDouble("albedoB", 0.8).toFloat(),
+                                1f
+                            )
+                            renderer.cubeRenderer.metallic = mat.optDouble("metallic", 0.0).toFloat()
+                            renderer.cubeRenderer.roughness = mat.optDouble("roughness", 0.5).toFloat()
+                            renderer.cubeRenderer.emission = floatArrayOf(
+                                mat.optDouble("emissionR", 0.0).toFloat(),
+                                mat.optDouble("emissionG", 0.0).toFloat(),
+                                mat.optDouble("emissionB", 0.0).toFloat(),
+                                1f
+                            )
+                            renderer.cubeRenderer.emissionIntensity = mat.optDouble("emissionIntensity", 0.0).toFloat()
+                        }
                     } catch (e: Exception) {
                         // Ignore
                     }

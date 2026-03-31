@@ -29,6 +29,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.documentfile.provider.DocumentFile
+import com.blen.bludos.ui.theme.AppTypography
 import java.io.File
 import java.io.FileOutputStream
 
@@ -60,7 +61,8 @@ public class MainActivity : ComponentActivity() {
                      primary = BlenAccent,
                      onBackground = BlenTextNormal,
                      onSurface = BlenTextNormal
-                 )
+                 ),
+                 typography = AppTypography
              ) {
                  MainScreen(
                      projects = projectListState,

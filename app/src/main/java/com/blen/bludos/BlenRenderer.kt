@@ -39,20 +39,75 @@ class BlenRenderer : GLSurfaceView.Renderer {
 
         val vertexShaderCode = """
             uniform mat4 uMVPMatrix;
+            uniform mat4 uModelMatrix;
+
             attribute vec4 vPosition;
+            attribute vec3 aNormal;
             attribute vec4 aColor;
+
             varying vec4 vColor;
+            varying vec3 vNormal;
+            varying vec3 vFragPos;
+
             void main() {
                 gl_Position = uMVPMatrix * vPosition;
+                vFragPos = vec3(uModelMatrix * vPosition);
+                // In a real app we'd use the normal matrix (transpose of inverse of model matrix)
+                // but for simple uniform scaling, model matrix works okay for normals
+                vNormal = mat3(uModelMatrix) * aNormal;
                 vColor = aColor;
             }
         """.trimIndent()
 
         val fragmentShaderCode = """
             precision mediump float;
+
             varying vec4 vColor;
+            varying vec3 vNormal;
+            varying vec3 vFragPos;
+
+            uniform vec4 uAlbedo;
+            uniform float uMetallic;
+            uniform float uRoughness;
+            uniform vec4 uEmission;
+            uniform float uEmissionIntensity;
+            uniform int uIsSelected;
+
             void main() {
-                gl_FragColor = vColor;
+                vec3 norm = normalize(vNormal);
+                // Directional light coming from top-right-front
+                vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+
+                // Basic diffuse lighting (Lambert)
+                float diff = max(dot(norm, lightDir), 0.0);
+
+                // Ambient light
+                vec3 ambient = vec3(0.2);
+
+                // Apply PBR approximation (simplified)
+                // Roughness affects specular highlight spread (not fully implemented in this basic shader)
+                // Metallic darkens diffuse and relies on environment reflections (we just darken diffuse here)
+
+                vec3 diffuseLight = diff * vec3(1.0) * (1.0 - uMetallic);
+                vec3 finalColor = uAlbedo.rgb * (ambient + diffuseLight);
+
+                // Add emission
+                finalColor += uEmission.rgb * uEmissionIntensity;
+
+                // Override for selection highlight (Blender Orange)
+                if (uIsSelected == 1) {
+                    finalColor = mix(finalColor, vec3(0.91, 0.46, 0.0), 0.5);
+                } else if (uIsSelected == 2) {
+                     // Not selected, but we don't have a uniform for lines so lines use vColor
+                     // Wait, lines don't have normals.
+                }
+
+                // Fallback to vColor if albedo is black (for gizmos and grid)
+                if (uAlbedo.a == 0.0) {
+                    gl_FragColor = vColor;
+                } else {
+                    gl_FragColor = vec4(finalColor, uAlbedo.a);
+                }
             }
         """.trimIndent()
 

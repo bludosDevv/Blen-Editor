@@ -146,6 +146,10 @@ class GizmoRenderer(private val program: Int) {
         val mvpMatrixHandle = GLES20.glGetUniformLocation(program, "uMVPMatrix")
         GLES20.glUniformMatrix4fv(mvpMatrixHandle, 1, false, mvpMatrix, 0)
 
+        // Zero out albedo for gizmos so it falls back to vColor in shader
+        val uAlbedo = GLES20.glGetUniformLocation(program, "uAlbedo")
+        if (uAlbedo >= 0) GLES20.glUniform4f(uAlbedo, 0f, 0f, 0f, 0f)
+
         GLES20.glDrawArrays(GLES20.GL_LINES, 0, curLCount)
 
         GLES20.glDisableVertexAttribArray(positionHandle)
